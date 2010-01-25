@@ -12,6 +12,7 @@ class Nginx < Formula
   end
 
   depends_on 'pcre'
+  depends_on 'uwsgi' if ARGV.include? '--with-uwsgi'
 
   skip_clean 'logs'
 
@@ -23,7 +24,9 @@ class Nginx < Formula
 
   def options
     [
-      ['--with-passenger', "Compile with support for Phusion Passenger module"]
+      ['--with-passenger', "Compile with support for Phusion Passenger module"],
+      ['--with-uwsgi', "Compile with uWSGI module"],
+      ['--with-upload-progress', "Compile with upload progress module"],
     ]
   end
 
@@ -41,12 +44,37 @@ class Nginx < Formula
   end
 
   def install
-    args = ["--prefix=#{prefix}", "--with-http_ssl_module", "--with-pcre",
-            "--conf-path=#{etc}/nginx/nginx.conf", "--pid-path=#{var}/run/nginx.pid",
-            "--lock-path=#{var}/nginx/nginx.lock"]
-    args << passenger_config_args if ARGV.include? '--with-passenger'
-
-    system "./configure", *args
+    configure_args = [
+      "--prefix=#{prefix}",
+      "--with-http_ssl_module"
+    ]
+    
+    configure_args << passenger_config_args if ARGV.include? '--with-passenger'
+    
+    # additional module descriptions
+    # [shortname, formulaclass, subdir]
+    # shortname is the --with-#{shortname} string, formulaclass is the formula
+    # pointing to the module source and subdir is the subdirectory in the source
+    # checkout that contains the module
+    modules =  [
+        ['uwsgi', Uwsgi, 'nginx'],
+        ['upload-progress', NginxUploadProgressModule, ''],
+      ]
+    d = Dir.getwd
+    
+    for mod in modules
+      shortname, formula, subdir = mod
+      if ARGV.include? "--with-#{shortname}"
+        dest = "#{d}/#{shortname}/"
+        formula.new.brew {
+          FileUtils.mkdir dest
+          FileUtils.mv Dir["*"], dest
+        }
+        configure_args << "--add-module=#{dest}#{subdir}"
+      end
+    end
+    
+    system "./configure", *configure_args
     system "make install"
 
     (prefix+'org.nginx.plist').write startup_plist
