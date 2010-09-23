@@ -17,5 +17,6 @@ class Portaudio <Formula
     end
 
     system "make install"
+    include.install('include/pa_mac_core.h')
   end
 end
